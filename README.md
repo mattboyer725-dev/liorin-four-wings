@@ -2,6 +2,10 @@
 
 Teach on the board. Hold in the cold engine. Hunt BOT titles only. Keep every game.
 
+**Live:** [liorin-chess-prod-vercel.vercel.app](https://liorin-chess-prod-vercel.vercel.app)
+
+**Source:** [mattboyer725-dev/liorin-four-wings](https://github.com/mattboyer725-dev/liorin-four-wings)
+
 This is a **new** public product. It is not the school `liorin` repo and not the earlier academy deploy.
 
 ## Wings (kept separate)

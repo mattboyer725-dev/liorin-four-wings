@@ -119,9 +119,11 @@ export function evaluate(chess: Chess) {
   if (rights.k || rights.q) score += 18;
   const br = chess.getCastlingRights("b");
   if (br.k || br.q) score -= 18;
-  const endgame = whiteNonPawn + blackNonPawn <= 6;
+  const endgame = whiteNonPawn + blackNonPawn <= 2;
   if (wk) score += (endgame ? KING_END : PST.k)[indexOf(wk, true)] ?? 0;
   if (bk) score -= (endgame ? KING_END : PST.k)[indexOf(bk, false)] ?? 0;
+  if (!endgame && wk && wk[1] !== "1") score -= 220 + (Number(wk[1]) - 1) * 90;
+  if (!endgame && bk && bk[1] !== "8") score += 220 + (8 - Number(bk[1])) * 90;
   if (endgame && wk && bk) {
     const wf = wk.charCodeAt(0) - 97;
     const wr = Number(wk[1]) - 1;
@@ -269,6 +271,21 @@ function drawScore(chess: Chess, maximizing: boolean) {
   return 0;
 }
 
+function exposed(chess: Chess) {
+  const them = chess.turn();
+  const us = them === "w" ? "b" : "w";
+  let loss = 0;
+  for (const row of chess.board()) {
+    for (const cell of row) {
+      if (!cell || cell.color !== us || cell.type === "k") continue;
+      if (chess.isAttacked(cell.square, them) && !chess.isAttacked(cell.square, us)) {
+        loss += VALUE[cell.type];
+      }
+    }
+  }
+  return loss;
+}
+
 function shufflePenalty(chess: Chess, m: Move) {
   const hist = chess.history({ verbose: true });
   if (hist.length < 2) return 0;
@@ -349,6 +366,7 @@ export function chooseMoveFrom(chess: Chess, profile: EngineProfile, budgetMs?: 
       } else {
         score = -negamax(chess, depth - 1, -Infinity, Infinity, 1, tactics, qsearch, deadline, tt);
       }
+      score -= exposed(chess);
       chess.undo();
       if (!behind) score -= shufflePenalty(chess, m);
       if (m.piece === "k" && !m.captured && !/[kq]/.test(m.flags) && ply < 40) score -= 80;

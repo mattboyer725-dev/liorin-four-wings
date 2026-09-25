@@ -87,7 +87,7 @@ export function bookMove(chess: Chess, salt = 0): Move | null {
   const key = fenKey(chess.fen());
   const list = BOOK_SANS[key];
   if (!list?.length) return null;
-  const idx = list.length === 1 ? 0 : hash32(`${key}|${salt}`) % list.length;
+  const idx = salt === 0 || list.length === 1 ? 0 : hash32(`${key}|${salt}`) % list.length;
   const san = list[idx]!;
   try {
     const m = chess.move(san);

@@ -140,6 +140,12 @@ export function evaluate(chess: Chess) {
   return score;
 }
 
+/** Side-to-move score. `evaluate` is White-positive; negamax needs the player to move. */
+function evalSTM(chess: Chess) {
+  const s = evaluate(chess);
+  return chess.turn() === "w" ? s : -s;
+}
+
 function orderedMoves(chess: Chess, tactics: boolean, hashMove?: string): Move[] {
   const moves = chess.moves({ verbose: true });
   return moves.sort((a, b) => {
@@ -173,10 +179,10 @@ function quiesce(
   remain: number,
   deadline: Deadline,
 ): number {
-  if (Date.now() > deadline.t) return evaluate(chess);
+  if (Date.now() > deadline.t) return evalSTM(chess);
   if (chess.isCheckmate()) return -100000;
   if (chess.isDraw()) return 0;
-  const stand = evaluate(chess);
+  const stand = evalSTM(chess);
   if (remain <= 0) return stand;
   if (stand >= beta) return stand;
   if (stand > alpha) alpha = stand;
@@ -204,7 +210,7 @@ function negamax(
   deadline: Deadline,
   tt: Tt,
 ): number {
-  if (Date.now() > deadline.t) return evaluate(chess);
+  if (Date.now() > deadline.t) return evalSTM(chess);
   if (chess.isCheckmate()) return -100000 + ply;
   if (chess.isThreefoldRepetition() || chess.isStalemate() || chess.isInsufficientMaterial()) {
     return 0;
@@ -214,10 +220,10 @@ function negamax(
   const hit = tt.get(key);
   if (hit && hit.depth >= depth) return hit.score;
   if (depth === 0) {
-    return qsearch ? quiesce(chess, alpha, beta, 2, deadline) : evaluate(chess);
+    return qsearch ? quiesce(chess, alpha, beta, 2, deadline) : evalSTM(chess);
   }
   const moves = orderedMoves(chess, tactics, hit?.move);
-  if (!moves.length) return evaluate(chess);
+  if (!moves.length) return evalSTM(chess);
   let best = -Infinity;
   let bestMove = uciOf(moves[0]!);
   for (const m of moves) {
@@ -314,14 +320,20 @@ export function chooseMoveFrom(chess: Chess, profile: EngineProfile, budgetMs?: 
   const tt: Tt = new Map();
   const maxDepth = MAX_DEPTH[profile];
   let best = moves[0]!;
-  let bestScore = -Infinity;
   const mat = materialOnly(chess);
   const behind = maximizing ? mat < -80 : mat > 80;
+  const ply = chess.history().length;
 
   for (let depth = 1; depth <= maxDepth; depth++) {
-    if (Date.now() > deadline.t && depth > (profile === "cold" ? 2 : 1)) break;
+    if (Date.now() > deadline.t && depth > 1) break;
+    let layerBest = best;
+    let layerScore = -Infinity;
+    let finished = true;
     for (const m of orderedMoves(chess, tactics, uciOf(best))) {
-      if (Date.now() > deadline.t && depth > 1) break;
+      if (Date.now() > deadline.t && depth > 1) {
+        finished = false;
+        break;
+      }
       chess.move(m);
       let score: number;
       if (chess.isCheckmate()) {
@@ -339,14 +351,18 @@ export function chooseMoveFrom(chess: Chess, profile: EngineProfile, budgetMs?: 
       }
       chess.undo();
       if (!behind) score -= shufflePenalty(chess, m);
-      if (m.piece === "k" && !m.captured && !/[kq]/.test(m.flags) && chess.history().length < 40) {
-        score -= 80;
+      if (m.piece === "k" && !m.captured && !/[kq]/.test(m.flags) && ply < 40) score -= 80;
+      if (m.piece === "q" && !m.captured && ply < 12) score -= 400;
+      const back = m.color === "w" ? "1" : "8";
+      if ((m.piece === "n" || m.piece === "b") && m.to[1] === back && !m.captured && ply < 24) {
+        score -= 300;
       }
-      if (score > bestScore) {
-        bestScore = score;
-        best = m;
+      if (score > layerScore) {
+        layerScore = score;
+        layerBest = m;
       }
     }
+    if (finished || depth === 1) best = layerBest;
   }
 
   return best;
